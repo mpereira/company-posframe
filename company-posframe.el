@@ -71,6 +71,22 @@
 (require 'posframe)
 (require 'subr-x)
 
+;; Extracted from org-mode:
+;; https://github.com/bzg/org-mode/blob/817c0c81e8f6d1dc387956c8c5b026ced62c157c/lisp/org-macs.el#L535-L547
+(defun company-posframe--combine-plists (&rest plists)
+  "Create a single property list from all plists in PLISTS.
+The process starts by copying the first list, and then setting properties from
+the other lists. Settings in the last list are the most significant ones and
+overrule settings in the other lists."
+  (let ((rtn (copy-sequence (pop plists)))
+        p v ls)
+    (while plists
+      (setq ls (pop plists))
+      (while ls
+        (setq p (pop ls) v (pop ls))
+        (setq rtn (plist-put rtn p v))))
+    rtn))
+
 (defgroup company-posframe nil
   "Use a child-frame as company candidate menu"
   :group 'company
@@ -156,7 +172,7 @@ be triggered manually using `company-posframe-quickhelp-show'."
 (defvar-local company-posframe-quickhelp-timer nil
   "Quickhelp idle timer.")
 
-(defvar company-posframe-show-params nil
+(defvar company-posframe-show-params (list :no-properties nil)
   "List of extra parameters passed to `posframe-show' in
   `company-posframe-show'.")
 
@@ -165,8 +181,7 @@ be triggered manually using `company-posframe-quickhelp-show'."
         :internal-border-width 1
         :timeout 60
         :internal-border-color "gray50"
-        :no-properties nil
-        :poshandler nil)
+        :no-properties nil)
   "List of parameters passed to `posframe-show'.")
 
 (defvar company-posframe-notification "")
@@ -262,18 +277,20 @@ be triggered manually using `company-posframe-quickhelp-show'."
       (when company-posframe-show-indicator
         (setq-local mode-line-format `(,(substring backend-names 0
                                                    (min width (length backend-names)))))))
-    (apply #'posframe-show buffer
-           :string contents
-           :position (- (point) (length company-prefix))
-           :min-height (+ height
-                          (if company-posframe-show-indicator 1 0))
-           :min-width (+ company-tooltip-minimum-width (* 2 company-tooltip-margin))
-           :max-width (+ company-tooltip-maximum-width (* 2 company-tooltip-margin))
-           :x-pixel-offset (* -1 company-tooltip-margin (default-font-width))
-           :respect-mode-line company-posframe-show-indicator
-           :font company-posframe-font
-           :background-color (face-attribute 'company-tooltip :background)
-           company-posframe-show-params)))
+    (apply #'posframe-show
+           buffer
+           (company-posframe--combine-plists
+            (list :string contents
+                  :position (- (point) (length company-prefix))
+                  :min-height (+ height
+                                 (if company-posframe-show-indicator 1 0))
+                  :min-width (+ company-tooltip-minimum-width (* 2 company-tooltip-margin))
+                  :max-width (+ company-tooltip-maximum-width (* 2 company-tooltip-margin))
+                  :x-pixel-offset (* -1 company-tooltip-margin (default-font-width))
+                  :respect-mode-line company-posframe-show-indicator
+                  :font company-posframe-font
+                  :background-color (face-attribute 'company-tooltip :background))
+            company-posframe-show-params))))
 
 (defun company-posframe-hide ()
   "Hide company-posframe candidate menu."
@@ -413,14 +430,15 @@ just grab the first candidate and press forward."
           (lower-frame
            (apply #'posframe-show
                   company-posframe-quickhelp-buffer
-                  :string doc
-                  :width width
-                  :min-width width
-                  :min-height height
-                  :height height
-                  :background-color (face-attribute 'company-posframe-quickhelp :background nil t)
-                  :foreground-color (face-attribute 'company-posframe-quickhelp :foreground nil t)
-                  company-posframe-quickhelp-show-params)))))))
+                  (company-posframe--combine-plists
+                   (list :string doc
+                         :width width
+                         :min-width width
+                         :min-height height
+                         :height height
+                         :background-color (face-attribute 'company-posframe-quickhelp :background nil t)
+                         :foreground-color (face-attribute 'company-posframe-quickhelp :foreground nil t))
+                   company-posframe-quickhelp-show-params))))))))
 
 (defun company-posframe-quickhelp-right-poshandler (_info)
   (with-current-buffer company-posframe-buffer
